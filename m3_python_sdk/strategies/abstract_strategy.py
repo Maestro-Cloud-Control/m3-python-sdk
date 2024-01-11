@@ -125,9 +125,8 @@ class AbstractStrategy(ABC):
             response_json = json.loads(response_item).get('results')[0]
 
             status = response_json.get('status')
-            code = response_json.get('code', None)
             status_code = response_json.get('statusCode', None)
-            warnings = response_json.get('warnings', [])
+            warnings = response_json.get('warnings', None)
 
             if status == SUCCESS_STATUS:
                 data = response_json.get('data', None)
@@ -139,7 +138,7 @@ class AbstractStrategy(ABC):
 
                 response = {
                     'status': status,
-                    'status_code': status_code if status_code else code,
+                    'status_code': status_code,
                 }
 
                 if isinstance(data, str):
@@ -164,19 +163,33 @@ class AbstractStrategy(ABC):
 
             elif status == ERROR_STATUS:
                 error = response_json.get('error', None)
+
+                try:
+                    error = json.loads(error)
+                except:
+                    error = error
+
                 return {
-                    'status_code': status_code if status_code else code,
+                    'status_code': status_code,
                     'status': status,
                     'message': error
                 }
             else:
                 data = response_json.get('readableError')
-                return {
-                    'status_code': status_code if status_code else code,
+
+                try:
+                    data = json.loads(data)
+                except:
+                    data = data
+
+                response = {
+                    'status_code': status_code,
                     'status': status,
                     'message': data,
-                    'warnings': warnings
                 }
+                if warnings:
+                    response.update({'warnings': warnings})
+                return response
 
         except json.decoder.JSONDecodeError:
             _LOG.error('Response can not be decoded - invalid Json string')
