@@ -11,22 +11,21 @@ _name_to_level = {
     'DEBUG': logging.DEBUG
 }
 
-logger = logging.getLogger()
+logger = logging.getLogger('python_sdk')
 logger.propagate = False
 
+log_format = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+console_formatter = logging.Formatter(log_format)
+
 console_handler = logging.StreamHandler(stream=stdout)
-console_formatter = logging.Formatter(
-    '%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 console_handler.setFormatter(console_formatter)
 logger.addHandler(console_handler)
 
 log_level = _name_to_level.get(os.environ.get('log_level'), logging.WARNING)
-logger.setLevel(log_level)
 logging.captureWarnings(True)
 
 
-def get_logger(log_name, level=None):
-    module_logger = logging.getLogger(log_name)
-    if level is not None:
-        module_logger.setLevel(level)
+def get_logger(log_name, level=log_level):
+    module_logger = logger.getChild(log_name)
+    module_logger.setLevel(level)
     return module_logger

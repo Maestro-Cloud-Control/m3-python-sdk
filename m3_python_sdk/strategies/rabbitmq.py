@@ -11,7 +11,7 @@ from m3_python_sdk.utils.constants import PLAIN_CONTENT_TYPE, \
     TIMEOUT_ERROR_MESSAGE, Queues
 from m3_python_sdk.utils.constants import RABBIT_DEFAULT_RESPONSE_TIMEOUT
 from m3_python_sdk.utils.constants import SYNC_HEADER, \
-    APPLICATION_JSON, CONFIGURATION_ISSUES_ERROR_MESSAGE
+    CONFIGURATION_ISSUES_ERROR_MESSAGE
 from m3_python_sdk.utils.exeption import raise_application_exception
 from m3_python_sdk.utils.logger import get_logger
 
@@ -82,6 +82,11 @@ class RabbitMqStrategy(AbstractStrategy):
         self.rabbit_exchange = rabbit_exchange if rabbit_exchange \
             else os.getenv('RABBIT_EXCHANGE', None)
         self.responses = {}
+
+        _LOG.debug('Initialized rabbit options: '
+                   f'request_queue/routing_key: {self._request_queue}, '
+                   f'response_queue: {self._response_queue}, '
+                   f'exchange: {self.rabbit_exchange}')
 
     @classmethod
     def build(cls, host: str, port: int = None, amqps: bool = True,
@@ -417,6 +422,13 @@ class RabbitMqStrategy(AbstractStrategy):
             async_request=True,
             compressed=compressed
         )
+        headers[SYNC_HEADER] = False
+
+        _LOG.debug('Resolved rabbit options: '
+                   f'request_queue/routing_key: {self._request_queue}, '
+                   f'exchange: {self.rabbit_exchange}')
+
+        _LOG.debug(f'Prepared headers: {headers}')
 
         _LOG.debug(
             f'Going to execute async command: {command_name}'
@@ -425,8 +437,8 @@ class RabbitMqStrategy(AbstractStrategy):
         return self.publish(routing_key=self._request_queue,
                             exchange=self.rabbit_exchange,
                             message=message,
-                            headers={SYNC_HEADER: False},
-                            content_type=APPLICATION_JSON)
+                            headers=headers,
+                            content_type=PLAIN_CONTENT_TYPE)
 
     def execute_sync(self, command_name, parameters, secure_parameters=None,
                      is_flat_request=None, compressed=False):
@@ -446,6 +458,12 @@ class RabbitMqStrategy(AbstractStrategy):
                 request_queue=self._request_queue if self._request_queue else None,
                 response_queue=self._response_queue if self._response_queue else None
             )
+        _LOG.debug('Resolved rabbit options: '
+                   f'request_queue/routing_key: {request_queue}, '
+                   f'response_queue: {response_queue}, '
+                   f'exchange: {exchange}')
+
+        _LOG.debug(f'Prepared headers: {headers}')
 
         request_id = super()._generate_id()
 
