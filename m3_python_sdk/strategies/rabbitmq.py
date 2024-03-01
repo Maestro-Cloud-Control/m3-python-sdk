@@ -2,6 +2,7 @@ import base64
 import gzip
 import json
 import os
+from typing import Optional
 
 import pika
 from pika import exceptions
@@ -341,6 +342,38 @@ class RabbitMqStrategy(AbstractStrategy):
                 json.dumps(result).encode('UTF-8'))).decode()
         return result
 
+    def _build_request(
+            self,
+            command_name: str,
+            parameters: list[dict] | dict,
+            id: Optional[str] = None,
+            is_flat_request: bool = False,
+            compressed: bool = False,
+    ) -> list[dict] | str:
+        if isinstance(parameters, list):
+            result = []
+            for payload in parameters:
+                request_id = id or self._generate_id()
+                result.extend(self._build_payload(
+                    request_id,
+                    command_name,
+                    payload,
+                    is_flat_request,
+                ))
+        else:
+            request_id = id or self._generate_id()
+            result = self._build_payload(
+                request_id,
+                command_name,
+                parameters,
+                is_flat_request,
+            )
+        if compressed:
+            return base64.b64encode(
+                gzip.compress(json.dumps(result).encode('UTF-8'))
+            ).decode()
+        return result
+
     def _build_secure_message(self, id, command_name, parameters_to_secure,
                               secure_parameters=None, is_flat_request=False):
         if not secure_parameters:
@@ -352,6 +385,38 @@ class RabbitMqStrategy(AbstractStrategy):
             parameters=secured_parameters,
             id=id,
             is_flat_request=is_flat_request
+        )
+
+    def _build_secure_request(
+            self,
+            command_name: str,
+            parameters_to_secure: list[dict] | dict,
+            id: Optional[str] = None,
+            secure_parameters=None,
+            is_flat_request: bool = False,
+            compressed: bool = False,
+    ) -> list[dict] | str:
+
+        if not secure_parameters:
+            secure_parameters = []
+        if isinstance(parameters_to_secure, dict):
+            secured_parameters = {
+                k: (v if k not in secure_parameters else '*****')
+                for k, v in parameters_to_secure.items()
+            }
+        else:    # If parameters_to_secure is a list of dicts
+            secured_parameters = [
+                {k: (v if k not in secure_parameters else '*****')
+                 for k, v in param_dict.items()}
+                for param_dict in parameters_to_secure
+            ]
+
+        return self._build_request(
+            command_name=command_name,
+            parameters=secured_parameters,
+            id=id,
+            is_flat_request=is_flat_request,
+            compressed=compressed,
         )
 
     def pre_process_request(self, command_name, parameters, secure_parameters,
@@ -391,6 +456,51 @@ class RabbitMqStrategy(AbstractStrategy):
             user=self._maestro_user,
             async_request=async_request,
             compressed=compressed
+        )
+        _LOG.debug('Signed headers prepared')
+        return encrypted_body, headers
+
+    def pre_process_batch_request(
+            self,
+            command_name: str,
+            parameters: list[dict] | dict,
+            secure_parameters: list[dict] | dict,
+            is_flat_request: bool = False,
+            async_request: bool = False,
+            compressed: bool = False,
+    ) -> tuple[bytes, dict]:
+
+        _LOG.debug('Going to pre-process request')
+        payload = self._build_request(
+            command_name=command_name,
+            parameters=parameters,
+            is_flat_request=is_flat_request,
+            compressed=compressed,
+        )
+        secure_payload = payload
+        if not compressed:
+            secure_payload = self._build_secure_request(
+                command_name=command_name,
+                parameters_to_secure=parameters,
+                secure_parameters=secure_parameters,
+                is_flat_request=is_flat_request,
+            )
+        _LOG.debug(
+            f'Prepared command: {command_name}\nCommand format: {secure_payload}'
+        )
+
+        encrypted_body = self._encrypt(
+            secret_key=self._sdk_secret_key,
+            data=payload,
+        )
+        _LOG.debug('Message encrypted')
+        # sign headers
+        headers = self._get_signed_headers(
+            access_key=self._sdk_access_key,
+            secret_key=self._sdk_secret_key,
+            user=self._maestro_user,
+            async_request=async_request,
+            compressed=compressed,
         )
         _LOG.debug('Signed headers prepared')
         return encrypted_body, headers
@@ -493,7 +603,123 @@ class RabbitMqStrategy(AbstractStrategy):
         return super().post_process_request(response=response_item,
                                             secret_key=self._sdk_secret_key)
 
-    def execute(self, request_data: dict, command_name: str, **kwargs, ):
+    def execute_batch_sync(
+            self,
+            command_name: str,
+            parameters: list[dict] | dict,
+            secure_parameters: list[dict] | dict = None,
+            is_flat_request: bool = False,
+            compressed: bool = False,
+    ):
+
+        message, headers = self.pre_process_batch_request(
+            command_name=command_name,
+            parameters=parameters,
+            secure_parameters=secure_parameters,
+            is_flat_request=is_flat_request,
+            async_request=False,
+            compressed=compressed,
+        )
+
+        request_queue, exchange, response_queue = self.__resolve_rabbit_options(
+            exchange=self.rabbit_exchange or None,
+            request_queue=self._request_queue or None,
+            response_queue=self._response_queue or None,
+        )
+        _LOG.debug(
+            f'Resolved rabbit options: request_queue/routing_key: '
+            f'{request_queue}, response_queue: {response_queue}, exchange: '
+            f'{exchange}'
+        )
+
+        _LOG.debug(f'Prepared headers: {headers}')
+
+        request_id = super()._generate_id()
+
+        _LOG.debug(
+            f'Going to execute sync command: {command_name}\nCommand format: '
+            f'{message}'
+        )
+
+        self.publish_sync(
+            routing_key=request_queue,
+            exchange=exchange,
+            callback_queue=response_queue,
+            correlation_id=request_id,
+            message=message,
+            headers=headers,
+            content_type=PLAIN_CONTENT_TYPE,
+        )
+        try:
+            response_item = self.consume_sync(
+                queue=response_queue,
+                correlation_id=request_id,
+            )
+        except exceptions.ConnectionWrongStateError as e:
+            raise raise_application_exception(content=e)
+        if not response_item:
+            raise raise_application_exception(
+                code=408,
+                content=(
+                    f"Response wasn't received. Timeout:{self.timeout} seconds."
+                )
+            )
+
+        return super().post_process_batch_request(
+            response=response_item,
+            secret_key=self._sdk_secret_key,
+        )
+
+    def execute_batch_async(
+            self,
+            command_name: str,
+            parameters: list[dict] | dict,
+            secure_parameters: list[dict] | dict = None,
+            is_flat_request: bool = False,
+            compressed: bool = False,
+    ):
+
+        _LOG.debug(
+            f'Command info:\n command name: {command_name}\n parameters: '
+            f'{parameters}'
+        )
+
+        message, headers = self.pre_process_batch_request(
+            command_name=command_name,
+            parameters=parameters,
+            secure_parameters=secure_parameters,
+            is_flat_request=is_flat_request,
+            async_request=True,
+            compressed=compressed,
+        )
+        headers[SYNC_HEADER] = False
+
+        _LOG.debug(
+            f'Resolved rabbit options: request_queue/routing_key: '
+            f'{self._request_queue}, exchange: {self.rabbit_exchange}'
+        )
+
+        _LOG.debug(f'Prepared headers: {headers}')
+
+        _LOG.debug(
+            f'Going to execute async command: {command_name}\nCommand format: '
+            f'{message}'
+        )
+
+        return self.publish(
+            routing_key=self._request_queue,
+            exchange=self.rabbit_exchange,
+            message=message,
+            headers=headers,
+            content_type=PLAIN_CONTENT_TYPE,
+        )
+
+    def execute(
+            self,
+            request_data: dict | list[dict],
+            command_name: str,
+            **kwargs,
+    ):
 
         secure_parameters = kwargs.get('secure_parameters', None)
         is_flat_request = kwargs.get('is_flat_request', None)
@@ -517,4 +743,35 @@ class RabbitMqStrategy(AbstractStrategy):
                 compressed=compressed,
                 secure_parameters=secure_parameters,
                 is_flat_request=is_flat_request
+            )
+
+    def execute_batch(
+            self,
+            request_data: dict | list[dict],
+            command_name: str,
+            **kwargs,
+    ):
+
+        secure_parameters = kwargs.get('secure_parameters', None)
+        is_flat_request = kwargs.get('is_flat_request', None)
+        compressed = kwargs.get('compressed', None)
+        sync = kwargs.get('sync')
+
+        if sync:
+            _LOG.debug('Going to execute_sync inside def execute()')
+            return self.execute_batch_sync(
+                command_name=command_name,
+                parameters=request_data,
+                compressed=compressed,
+                secure_parameters=secure_parameters,
+                is_flat_request=is_flat_request,
+            )
+        else:
+            _LOG.debug('Going to execute_async inside def execute()')
+            return self.execute_batch_async(
+                command_name=command_name,
+                parameters=request_data,
+                compressed=compressed,
+                secure_parameters=secure_parameters,
+                is_flat_request=is_flat_request,
             )
