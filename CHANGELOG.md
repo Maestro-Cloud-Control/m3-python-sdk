@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] 2024-02-27
+### Added
+- Ability to send batch requests
+- Methods: `post_process_batch_request`,  `execute_batch`,`execute_batch_async`,
+`_build_request`, `_build_secure_request`, `pre_process_batch_request`,
+`execute_batch_sync`, `add_consumption_batch`, `build_consumption_params`
+
 ## [1.0.6] 2023-12-08
 ### Added
 - Missing headers for `execute_async` method

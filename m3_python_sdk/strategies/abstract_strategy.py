@@ -197,3 +197,98 @@ class AbstractStrategy(ABC):
                 code=500,
                 content='Response can not be decoded'
             )
+
+    def post_process_batch_request(
+            self,
+            response,
+            secret_key: str,
+    ) -> list[dict]:
+        try:
+            response_item = self._decrypt(
+                secret_key=secret_key,
+                data=response,
+            )
+            _LOG.debug('Message from M3-server successfully decrypted')
+        except binascii.Error:
+            response_item = response.decode('utf-8')
+        try:
+            _LOG.debug(f'Raw decrypted message from server: {response_item}')
+            response_results = json.loads(response_item).get('results')
+            responses = []
+            for response_json in response_results:
+
+                status = response_json.get('status')
+                status_code = response_json.get('statusCode', None)
+                warnings = response_json.get('warnings', None)
+
+                if status == SUCCESS_STATUS:
+                    data = response_json.get('data', None)
+
+                    try:
+                        data = json.loads(data)
+                    except:
+                        data = data
+
+                    response = {
+                        'status': status,
+                        'status_code': status_code,
+                    }
+
+                    if isinstance(data, str):
+                        response.update({'message': data})
+                    if isinstance(data, dict):
+                        data = [data]
+                    if isinstance(data, list):
+                        response.update({'items': data})
+
+                    items = response_json.get('items', None)
+                    if items:
+                        response.update({'items': items})
+
+                    table_title = response_json.get('tableTitle', None)
+                    if table_title:
+                        response.update({'table_title': table_title})
+
+                    if warnings:
+                        response.update({'warnings': warnings})
+
+                    responses.append(response)
+
+                elif status == ERROR_STATUS:
+                    error = response_json.get('error', None)
+
+                    try:
+                        error = json.loads(error)
+                    except:
+                        error = error
+
+                    responses.append({
+                        'status_code': status_code,
+                        'status': status,
+                        'message': error,
+                    })
+                else:
+                    data = response_json.get('readableError')
+
+                    try:
+                        data = json.loads(data)
+                    except:
+                        data = data
+
+                    response = {
+                        'status_code': status_code,
+                        'status': status,
+                        'message': data,
+                    }
+                    if warnings:
+                        response.update({'warnings': warnings})
+                    responses.append(response)
+
+            return responses
+
+        except json.decoder.JSONDecodeError:
+            _LOG.error('Response can not be decoded - invalid Json string')
+            return raise_application_exception(
+                code=500,
+                content='Response can not be decoded'
+            )

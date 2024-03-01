@@ -7,8 +7,40 @@ from m3_python_sdk.utils.constants import ADD_CONSUMPTION, GET_CONSUMPTION, \
 
 class ConsumptionResource:
 
-    def __init__(self, client: 'RabbitMqStrategy' or 'HttpStrategy'):
+    def __init__(self, client: RabbitMqStrategy | HttpStrategy):
         self._client = client
+
+    @staticmethod
+    def build_consumption_params(
+        target_region: str,
+        year: int,
+        month: int,
+        value: float,
+        source_project: str = None,
+        target_project: str = None,
+        source_account_number: str = None,
+        target_account_number: str = None,
+        description: str = None,
+        service_name: str = None,
+    ) -> dict:
+        params = {
+            'target_region': target_region,
+            'year': year,
+            'month': month,
+            'value': value,
+            'description': description,
+        }
+
+        if source_project and target_project:
+            params.update({'source_project': source_project,
+                           'target_project': target_project})
+
+        if source_account_number and target_account_number and service_name:
+            params.update({'source_account_number': source_account_number,
+                           'target_account_number': target_account_number,
+                           'service_name': service_name})
+
+        return params
 
     def get_consumption(self,
                         target_region: str,
@@ -88,6 +120,24 @@ class ConsumptionResource:
             secure_parameters=secure_parameters,
             is_flat_request=is_flat_request,
             compressed=compressed
+        )
+
+        return res
+
+    def add_consumption_batch(
+        self,
+        chunk: list[dict],
+        sync: bool = True, secure_parameters=None,
+        is_flat_request=None, compressed: bool = False,
+    ) -> dict:
+
+        res = self._client.execute_batch(
+            command_name=ADD_CONSUMPTION,
+            request_data=chunk,
+            sync=sync,
+            secure_parameters=secure_parameters,
+            is_flat_request=is_flat_request,
+            compressed=compressed,
         )
 
         return res
