@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 import os
-import uuid
+from uuid import uuid4
 from abc import ABC, abstractmethod
 from datetime import datetime
 
@@ -23,7 +23,7 @@ class AbstractStrategy(ABC):
 
     @staticmethod
     def _generate_id():
-        return str(uuid.uuid1())
+        return str(uuid4())
 
     @staticmethod
     def _decrypt(secret_key, data):
@@ -73,10 +73,14 @@ class AbstractStrategy(ABC):
         return base64_request
 
     @staticmethod
-    def _get_signed_headers(access_key: str, secret_key: str, user: str,
-                            async_request: bool = False,
-                            compressed: bool = False, http: bool = False
-                            ) -> dict:
+    def _get_signed_headers(
+            access_key: str,
+            secret_key: str,
+            user: str,
+            async_request: bool = False,
+            compressed: bool = False,
+            http: bool = False
+    ) -> dict:
         """
         Create and sign necessary headers for interaction with Maestro API
         """

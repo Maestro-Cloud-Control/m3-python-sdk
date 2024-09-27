@@ -1,8 +1,8 @@
 from m3_python_sdk.strategies.http import HttpStrategy
 from m3_python_sdk.strategies.rabbitmq import RabbitMqStrategy
-from m3_python_sdk.utils.constants import ADD_CONSUMPTION, GET_CONSUMPTION, \
-    DELETE_CONSUMPTION, ADD_CONSUMPTION_DETAILS, GET_CONSUMPTION_DETAILS, \
-    DELETE_CONSUMPTION_DETAILS, CHECK_TENANT_STATUS, SdkCloud
+from m3_python_sdk.utils.constants import (
+    SdkCloud, ConsumptionApiActions, BillingApiActions,
+)
 
 
 class ConsumptionResource:
@@ -72,7 +72,7 @@ class ConsumptionResource:
                            'service_name': service_name})
 
         res = self._client.execute(
-            command_name=GET_CONSUMPTION,
+            command_name=ConsumptionApiActions.GET_CONSUMPTION,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -114,7 +114,7 @@ class ConsumptionResource:
                            'service_name': service_name})
 
         res = self._client.execute(
-            command_name=ADD_CONSUMPTION,
+            command_name=ConsumptionApiActions.ADD_CONSUMPTION,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -132,7 +132,7 @@ class ConsumptionResource:
     ) -> dict:
 
         res = self._client.execute_batch(
-            command_name=ADD_CONSUMPTION,
+            command_name=ConsumptionApiActions.ADD_CONSUMPTION,
             request_data=chunk,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -172,7 +172,7 @@ class ConsumptionResource:
                            'service_name': service_name})
 
         res = self._client.execute(
-            command_name=DELETE_CONSUMPTION,
+            command_name=ConsumptionApiActions.DELETE_CONSUMPTION,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -226,7 +226,7 @@ class ConsumptionResource:
             params.update({'target_cloud': target_cloud})
 
         res = self._client.execute(
-            command_name=ADD_CONSUMPTION_DETAILS,
+            command_name=ConsumptionApiActions.ADD_CONSUMPTION_DETAILS,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -280,7 +280,7 @@ class ConsumptionResource:
                                            compressed: bool = False):
 
         self._client.execute(
-            command_name=ADD_CONSUMPTION_DETAILS,
+            command_name=ConsumptionApiActions.ADD_CONSUMPTION_DETAILS,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -311,7 +311,7 @@ class ConsumptionResource:
             params.update({'day': day})
 
         res = self._client.execute(
-            command_name=ADD_CONSUMPTION_DETAILS,
+            command_name=ConsumptionApiActions.ADD_CONSUMPTION_DETAILS,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -347,7 +347,7 @@ class ConsumptionResource:
             params.update({'target_cloud': target_cloud})
 
         res = self._client.execute(
-            command_name=GET_CONSUMPTION_DETAILS,
+            command_name=ConsumptionApiActions.GET_CONSUMPTION_DETAILS,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -383,7 +383,7 @@ class ConsumptionResource:
             params.update({'target_cloud': target_cloud})
 
         res = self._client.execute(
-            command_name=DELETE_CONSUMPTION_DETAILS,
+            command_name=ConsumptionApiActions.DELETE_CONSUMPTION_DETAILS,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -406,7 +406,7 @@ class ConsumptionResource:
             params.update({'forceActivate': force_activate})
 
         res = self._client.execute(
-            command_name=CHECK_TENANT_STATUS,
+            command_name=BillingApiActions.CHECK_TENANT_STATUS,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,

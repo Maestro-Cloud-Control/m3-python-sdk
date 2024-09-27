@@ -20,12 +20,17 @@ _LOG = get_logger('RabbitMqService')
 
 
 class RabbitMqStrategy(AbstractStrategy):
-    def __init__(self, connection_url: str,
-                 request_queue: str = None,
-                 response_queue: str = None,
-                 rabbit_exchange: str = None, sdk_access_key: str = None,
-                 sdk_secret_key: str = None, maestro_user: str = None,
-                 timeout: int = None):
+    def __init__(
+            self,
+            connection_url: str,
+            request_queue: str = None,
+            response_queue: str = None,
+            rabbit_exchange: str = None,
+            sdk_access_key: str = None,
+            sdk_secret_key: str = None,
+            maestro_user: str = None,
+            timeout: int = None,
+    ):
         """
         This init method allow the creation of basic sdk HTTP strategy to use
         different maestro billing tools through Http protocol
@@ -90,15 +95,22 @@ class RabbitMqStrategy(AbstractStrategy):
                    f'exchange: {self.rabbit_exchange}')
 
     @classmethod
-    def build(cls, host: str, port: int = None, amqps: bool = True,
-              stage: str = '', username: str = None,
-              password: str = None,
-              request_queue: str = Queues.DEFAULT_MAESTRO_REQUEST_QUEUE,
-              response_queue: str = Queues.DEFAULT_MAESTRO_RESPONSE_QUEUE,
-              rabbit_exchange: str = None, sdk_access_key: str = None,
-              sdk_secret_key: str = None, maestro_user: str = None,
-              timeout: int = RABBIT_DEFAULT_RESPONSE_TIMEOUT
-              ) -> 'RabbitMqStrategy':
+    def build(
+            cls,
+            host: str,
+            port: int = None,
+            amqps: bool = True,
+            stage: str = '',
+            username: str = None,
+            password: str = None,
+            request_queue: str = Queues.DEFAULT_MAESTRO_REQUEST_QUEUE,
+            response_queue: str = Queues.DEFAULT_MAESTRO_RESPONSE_QUEUE,
+            rabbit_exchange: str = None,
+            sdk_access_key: str = None,
+            sdk_secret_key: str = None,
+            maestro_user: str = None,
+            timeout: int = RABBIT_DEFAULT_RESPONSE_TIMEOUT,
+    ) -> 'RabbitMqStrategy':
         """
         Builds a RabbitMQStrategy object with more flexible way to create url.
 
@@ -188,110 +200,172 @@ class RabbitMqStrategy(AbstractStrategy):
 
     def _open_channel(self):
         if not self.connection_url:
-            _LOG.error('Cannot connect to RabbitMQ, connection_url'
-                       ' was not provided')
+            _LOG.error(
+                'Cannot connect to RabbitMQ, connection_url was not provided'
+            )
+            raise raise_application_exception(
+                code=400, content='Connection URL not provided'
+            )
         try:
             parameters = pika.URLParameters(self.connection_url)
             self.conn = pika.BlockingConnection(parameters)
             _LOG.debug('Channel opened')
             return self.conn.channel()
-        except pika.exceptions.AMQPConnectionError:
+        except pika.exceptions.AMQPConnectionError as e:
+            error_msg = str(e) or "Bad credentials"
+            _LOG.error(f'Connection to RabbitMQ refused: {error_msg}')
             raise raise_application_exception(
-                code=401,
-                content='Connection to RabbitMQ refused. Bad credentials.')
+                code=401, content=f'Connection to RabbitMQ refused: {error_msg}'
+            )
 
     def _close(self):
-        if self.conn.is_open:
-            _LOG.debug('going to close channel')
-            self.conn.close()
+        try:
+            if self.conn.is_open:
+                self.conn.close()
+        except Exception as e:
+            _LOG.error(f"Failed to close RabbitMQ connection: {e}")
 
-    def publish(self, message, routing_key, exchange='', headers=None,
-                content_type=None):
-
+    def publish(
+            self,
+            message: str,
+            routing_key: str,
+            exchange: str = '',
+            headers: dict = None,
+            content_type: str = None,
+    ) -> None:
+        _LOG.debug(f'Request queue: {routing_key}')
         channel = self._open_channel()
-        channel.confirm_delivery()
-        response = channel.basic_publish(exchange=exchange,
-                                         routing_key=routing_key,
-                                         properties=pika.BasicProperties(
-                                             headers=headers,
-                                             content_type=content_type),
-                                         body=message,
-                                         mandatory=True)
-        self._close()
-        if not response:
-            _LOG.error(
-                'Message event was returned. Check RabbitMQ configuration: '
-                'maybe target queue does not exists.')
-            raise raise_application_exception(
-                code=502,
-                content=CONFIGURATION_ISSUES_ERROR_MESSAGE
-            )
-        _LOG.info('Message pushed')
+        try:
+            channel.confirm_delivery()
+            if not self.__basic_publish(
+                    channel=channel,
+                    exchange=exchange,
+                    routing_key=routing_key,
+                    properties=pika.BasicProperties(
+                        headers=headers, content_type=content_type,
+                    ),
+                    body=message,
+                    mandatory=True,
+            ):
+                _LOG.error(
+                    f'Message was not sent: routing_key={routing_key}, '
+                    f'exchange={exchange}, content_type={content_type}'
+                )
+                raise raise_application_exception(
+                    code=502, content=CONFIGURATION_ISSUES_ERROR_MESSAGE,
+                )
+            _LOG.info('Message pushed')
+        finally:
+            self._close()
 
-    def publish_sync(self, message, routing_key, correlation_id,
-                     callback_queue, exchange='', headers=None,
-                     content_type=None):
+    @staticmethod
+    def __basic_publish(
+            channel: pika.adapters.blocking_connection.BlockingChannel,
+            **kwargs,
+    ) -> bool:
+        try:
+            channel.basic_publish(**kwargs)
+            return True
+        except (pika.exceptions.NackError, pika.exceptions.UnroutableError):
+            _LOG.exception('Pika exception occurred')
+            return False
 
+    def publish_sync(
+            self,
+            message: str,
+            routing_key: str,
+            correlation_id: str,
+            callback_queue: str,
+            exchange: str = '',
+            headers: dict = None,
+            content_type: str = None,
+    ) -> None:
+        _LOG.debug(
+            f'Request queue: {routing_key}; Response queue: {callback_queue}'
+        )
         channel = self._open_channel()
-        channel.confirm_delivery()
-        response = channel.basic_publish(
-            exchange=exchange,
-            routing_key=routing_key,
-            properties=pika.BasicProperties(headers=headers,
-                                            reply_to=callback_queue,
-                                            correlation_id=correlation_id,
-                                            content_type=content_type),
-            body=message)
-        if not response:
-            _LOG.error(
-                'Message event was returned. Check RabbitMQ configuration: '
-                'maybe target queue does not exists.')
-            raise raise_application_exception(
-                code=502,
-                content=CONFIGURATION_ISSUES_ERROR_MESSAGE
+        try:
+            channel.confirm_delivery()
+            properties = pika.BasicProperties(
+                headers=headers,
+                reply_to=callback_queue,
+                correlation_id=correlation_id,
+                content_type=content_type,
             )
+            if not self.__basic_publish(
+                    channel=channel,
+                    exchange=exchange,
+                    routing_key=routing_key,
+                    properties=properties,
+                    body=message,
+            ):
+                _LOG.error(
+                    'Message event was returned. Check RabbitMQ configuration: '
+                    'maybe target queue does not exists.')
+                raise raise_application_exception(
+                    code=502, content=CONFIGURATION_ISSUES_ERROR_MESSAGE,
+                )
+            _LOG.info('Message pushed')
+        finally:
+            self._close()
 
-        _LOG.info('Message pushed')
+    def consume_sync(self, queue: str, correlation_id: str) -> bytes | None:
 
-    def consume_sync(self, queue, correlation_id):
-        def _consumer_callback(ch, method, props, body):
-            self.responses[props.correlation_id] = body
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-            ch.stop_consuming(props.correlation_id)
+        def _consumer_callback(
+                ch: pika.adapters.blocking_connection.BlockingChannel,
+                method: pika.spec.Basic.Deliver,
+                props: pika.spec.BasicProperties,
+                body: bytes,
+        ) -> None:
+            if props.correlation_id == correlation_id:
+                _LOG.debug(
+                    f'Message retrieved successfully with ID: '
+                    f'{props.correlation_id}'
+                )
+                self.responses[props.correlation_id] = body
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                ch.stop_consuming()
+            else:
+                _LOG.warning(
+                    f'Received message with mismatched Correlation ID:'
+                    f'{props.correlation_id} (expected: {correlation_id})'
+                )
+                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
         def _close_on_timeout():
-            _LOG.warn('Timeout exceeded. Close connection')
-            self.conn.close()
+            _LOG.warning('Timeout exceeded. Close connection')
+            self._close()
 
         channel = self._open_channel()
-        if channel.basic_consume(queue=queue,
-                                 on_message_callback=_consumer_callback,
-                                 consumer_tag=correlation_id):
-            _LOG.debug(f'Waiting for message. Queue: {queue},'
-                       f' Correlation id: {correlation_id}')
+        if channel.basic_consume(
+                queue=queue,
+                on_message_callback=_consumer_callback,
+                consumer_tag=correlation_id,
+        ):
+            _LOG.debug(
+                f'Waiting for message. Queue: {queue}, '
+                f'Correlation id: {correlation_id}'
+            )
         else:
-            _LOG.error('Failed to consume. Queue: {0}'.format(queue))
+            _LOG.error(f"Failed to consume. Queue: '{queue}'")
             raise raise_application_exception(
-                code=502,
-                content=TIMEOUT_ERROR_MESSAGE
+                code=502, content=TIMEOUT_ERROR_MESSAGE,
             )
 
-        self.conn.add_timeout(self.timeout, _close_on_timeout)
+        self.conn.call_later(self.timeout, _close_on_timeout)
 
         # blocking method
         channel.start_consuming()
         self._close()
 
-        if correlation_id in list(self.responses.keys()):
-            response = self.responses.pop(correlation_id)
-            _LOG.debug(f'Received response: {response}')
+        response = self.responses.pop(correlation_id, None)
+        if response:
+            _LOG.debug('Response successfully received and processed')
             return response
-        else:
-            _LOG.error(f'Response was not received. '
-                       f'Timeout: {self.timeout} seconds.')
-            return None
+        _LOG.error(f"Response wasn't received. Timeout: {self.timeout} seconds")
+        return None
 
-    def check_queue_exists(self, queue_name):
+    def check_queue_exists(self, queue_name: str) -> bool:
         channel = self._open_channel()
         try:
             channel.queue_declare(queue=queue_name, durable=True, passive=True)
@@ -301,7 +375,7 @@ class RabbitMqStrategy(AbstractStrategy):
         self._close()
         return True
 
-    def declare_queue(self, queue_name):
+    def declare_queue(self, queue_name: str) -> None:
         channel = self._open_channel()
         declare_resp = channel.queue_declare(queue=queue_name, durable=True)
         _LOG.info(f'Queue declaration response: {declare_resp}')
@@ -327,8 +401,14 @@ class RabbitMqStrategy(AbstractStrategy):
             ]
         return result
 
-    def _build_message(self, id, command_name, parameters,
-                       is_flat_request=False, compressed=False):
+    def _build_message(
+            self,
+            id: str,
+            command_name: str,
+            parameters: list[dict] | dict,
+            is_flat_request: bool = False,
+            compressed: bool = False,
+    ):
         if isinstance(parameters, list):
             result = []
             for payload in parameters:
@@ -374,8 +454,14 @@ class RabbitMqStrategy(AbstractStrategy):
             ).decode()
         return result
 
-    def _build_secure_message(self, id, command_name, parameters_to_secure,
-                              secure_parameters=None, is_flat_request=False):
+    def _build_secure_message(
+            self,
+            id: str,
+            command_name: str,
+            parameters_to_secure,
+            secure_parameters=None,
+            is_flat_request: bool = False,
+    ):
         if not secure_parameters:
             secure_parameters = []
         secured_parameters = {k: (v if k not in secure_parameters else '*****')
@@ -419,8 +505,15 @@ class RabbitMqStrategy(AbstractStrategy):
             compressed=compressed,
         )
 
-    def pre_process_request(self, command_name, parameters, secure_parameters,
-                            is_flat_request, async_request, compressed=False):
+    def pre_process_request(
+            self,
+            command_name: str,
+            parameters,
+            secure_parameters,
+            is_flat_request: bool,
+            async_request: bool,
+            compressed: bool = False,
+    ):
 
         request_id = self._generate_id()
 
@@ -505,8 +598,12 @@ class RabbitMqStrategy(AbstractStrategy):
         _LOG.debug('Signed headers prepared')
         return encrypted_body, headers
 
-    def __resolve_rabbit_options(self, exchange, request_queue,
-                                 response_queue):
+    def __resolve_rabbit_options(
+            self,
+            exchange: str,
+            request_queue: str,
+            response_queue: str,
+    ):
         exchange = exchange or self.rabbit_exchange
         if exchange:
             routing_key = ''
@@ -518,8 +615,14 @@ class RabbitMqStrategy(AbstractStrategy):
             self._response_queue)
         return routing_key, exchange, response_queue
 
-    def execute_async(self, command_name, parameters, secure_parameters=None,
-                      is_flat_request=None, compressed=True):
+    def execute_async(
+            self,
+            command_name: str,
+            parameters,
+            secure_parameters=None,
+            is_flat_request=None,
+            compressed: bool = True,
+    ):
         _LOG.debug(
             f'Command info:\n command name: {command_name}'
             f'\n parameters: {parameters}')
@@ -550,8 +653,14 @@ class RabbitMqStrategy(AbstractStrategy):
                             headers=headers,
                             content_type=PLAIN_CONTENT_TYPE)
 
-    def execute_sync(self, command_name, parameters, secure_parameters=None,
-                     is_flat_request=None, compressed=False):
+    def execute_sync(
+            self,
+            command_name: str,
+            parameters,
+            secure_parameters=None,
+            is_flat_request=None,
+            compressed: bool = False,
+    ):
 
         message, headers = self.pre_process_request(
             command_name=command_name,

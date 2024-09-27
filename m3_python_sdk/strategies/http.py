@@ -12,9 +12,13 @@ _LOG = get_logger('HttpService')
 
 class HttpStrategy(AbstractStrategy):
 
-    def __init__(self, sdk_access_key: str = None, sdk_secret_key: str = None,
-                 maestro_user: str = None, api_link: str = None):
-
+    def __init__(
+            self,
+            sdk_access_key: str = None,
+            sdk_secret_key: str = None,
+            maestro_user: str = None,
+            api_link: str = None,
+    ):
         """
         This init method allow the creation of basic sdk HTTP strategy to use
         different maestro billing tools through Http protocol
@@ -44,10 +48,16 @@ class HttpStrategy(AbstractStrategy):
             raise ValueError("Missing required sdk credential variables")
 
     @classmethod
-    def build(cls, host: str, port: int = None, https: bool = None,
-              stage: str = '',
-              sdk_access_key: str = None, sdk_secret_key: str = None,
-              maestro_user: str = None) -> 'HttpStrategy':
+    def build(
+            cls,
+            host: str,
+            port: int = None,
+            https: bool = None,
+            stage: str = '',
+            sdk_access_key: str = None,
+            sdk_secret_key: str = None,
+            maestro_user: str = None,
+    ) -> 'HttpStrategy':
         """
         # >>> host = 'm3.cloud.com'
         # >>> port = '8000'

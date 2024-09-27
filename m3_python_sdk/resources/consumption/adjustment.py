@@ -4,8 +4,9 @@ from datetime import datetime
 
 from m3_python_sdk.strategies.http import HttpStrategy
 from m3_python_sdk.strategies.rabbitmq import RabbitMqStrategy
-from m3_python_sdk.utils.constants import ADD_ADJUSTMENT, GET_ADJUSTMENT, \
-    DELETE_ADJUSTMENT, GET_TOTAL_BILLING_REPORT, SdkCloud, StatusCodes
+from m3_python_sdk.utils.constants import (
+    SdkCloud, StatusCodes, AdjustmentApiActions, BillingApiActions,
+)
 from m3_python_sdk.utils.logger import get_logger
 from m3_python_sdk.utils.exeption import raise_application_exception
 
@@ -14,7 +15,7 @@ _LOG = get_logger('Adjustment')
 
 class AdjustmentResource:
 
-    def __init__(self, client: 'RabbitMqStrategy' or 'HttpStrategy'):
+    def __init__(self, client: RabbitMqStrategy | HttpStrategy):
         self._client = client
 
     def add_adjustment(self,
@@ -56,7 +57,7 @@ class AdjustmentResource:
             return
 
         res = self._client.execute(
-            command_name=ADD_ADJUSTMENT,
+            command_name=AdjustmentApiActions.ADD_ADJUSTMENT,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -97,7 +98,7 @@ class AdjustmentResource:
             params.update({'target_cloud': target_cloud})
 
         res = self._client.execute(
-            command_name=GET_ADJUSTMENT,
+            command_name=AdjustmentApiActions.GET_ADJUSTMENT,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -137,7 +138,7 @@ class AdjustmentResource:
             params.update({'target_cloud': target_cloud})
 
         res = self._client.execute(
-            command_name=DELETE_ADJUSTMENT,
+            command_name=AdjustmentApiActions.DELETE_ADJUSTMENT,
             request_data=params,
             sync=sync,
             secure_parameters=secure_parameters,
@@ -243,7 +244,7 @@ class AdjustmentResource:
             )
 
         res = self._client.execute(
-            command_name=GET_TOTAL_BILLING_REPORT,
+            command_name=BillingApiActions.GET_TOTAL_BILLING_REPORT,
             request_data=request_object,
             sync=sync,
             secure_parameters=secure_parameters,
