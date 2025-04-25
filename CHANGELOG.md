@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] 2024-09-18
+### Changes:
+- Update `pika` library from version `1.0.0b1` to `1.3.2`
+- Update `RabbitMqStrategy` class to support `pika` version `1.3.2`
+- Update `pyproject.toml`
+- Remove `setup.cfg` and `setup.py`
+- Update from `uuid1` to `uuid4`
+- Add unit tests for `RabbitMqStrategy` class
+- Add unit tests for `HttpStrategy` class
+- Add `AdjustmentApiActions` and `ConsumptionApiActions` classes to group API 
+action constants. Update usage of API action constants in client execution calls
+- Update: Move `CHECK_TENANT_STATUS` and `GET_TOTAL_BILLING_REPORT` constants to
+`BillingApiActions` class
+
 ## [1.0.7] 2024-02-27
 ### Added
 - Ability to send batch requests

@@ -7,13 +7,18 @@ from m3_python_sdk.utils.exeption import raise_application_exception
 
 class BillingResource:
 
-    def __init__(self, client: 'RabbitMqStrategy' or 'HttpStrategy'):
+    def __init__(self, client: RabbitMqStrategy | HttpStrategy):
         self._client = client
 
-    def describe_billing_month(self, year: int, month: int,
-                               sync: bool = True, secure_parameters=None,
-                               is_flat_request=None, compressed: bool = False
-                               ) -> dict:
+    def describe_billing_month(
+            self,
+            year: int,
+            month: int,
+            sync: bool = True,
+            secure_parameters=None,
+            is_flat_request=None,
+            compressed: bool = False
+    ) -> dict:
         params = {
             'year': year,
             'month': month

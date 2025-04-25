@@ -17,9 +17,7 @@ class TestConsumptionResource(unittest.TestCase):
         self.adjustment = AdjustmentResource(client=contract_strategy)
 
         s3_client = S3Client()
-        self.billing = BillingResource(
-            client=contract_strategy
-        )
+        self.billing = BillingResource(client=contract_strategy)
 
         now = datetime.now()
 
