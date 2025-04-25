@@ -142,34 +142,46 @@ class ConsumptionResource:
 
         return res
 
-    def delete_consumption(self,
-                           target_region: str,
-                           year: int,
-                           month: int,
-                           source_project: str = None,
-                           target_project: str = None,
-                           source_account_number: str = None,
-                           target_account_number: str = None,
-                           description: str = None,
-                           service_name: str = None,
-                           sync: bool = True, secure_parameters=None,
-                           is_flat_request=None, compressed: bool = False
-                           ) -> dict:
+    def delete_consumption(
+            self,
+            *,
+            year: int,
+            month: int,
+            target_region: str | None = None,
+            source_project: str | None = None,
+            target_project: str | None = None,
+            source_account_number: str | None = None,
+            target_account_number: str | None = None,
+            description: str | None = None,
+            service_name: str | None = None,
+            sync: bool = True,
+            secure_parameters = None,
+            is_flat_request = None,
+            compressed: bool = False,
+    ) -> dict:
         params = {
-            'target_region': target_region,
             'year': year,
             'month': month,
-            'description': description
         }
 
+        if target_region is not None:
+            params['target_region'] = target_region
+
+        if description is not None:
+            params['description'] = description
+
         if source_project and target_project:
-            params.update({'source_project': source_project,
-                           'target_project': target_project})
+            params.update({
+                'source_project': source_project,
+                'target_project': target_project,
+            })
 
         if source_account_number and target_account_number and service_name:
-            params.update({'source_account_number': source_account_number,
-                           'target_account_number': target_account_number,
-                           'service_name': service_name})
+            params.update({
+                'source_account_number': source_account_number,
+                'target_account_number': target_account_number,
+                'service_name': service_name,
+            })
 
         res = self._client.execute(
             command_name=ConsumptionApiActions.DELETE_CONSUMPTION,
@@ -177,7 +189,7 @@ class ConsumptionResource:
             sync=sync,
             secure_parameters=secure_parameters,
             is_flat_request=is_flat_request,
-            compressed=compressed
+            compressed=compressed,
         )
 
         return res
