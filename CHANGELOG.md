@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] 2025-04-25
+### Changes:
+- Update the `delete_consumption` method in the `ConsumptionResource` class 
+to make the `target_region` parameter optional
+
 ## [1.1.0] 2024-09-18
 ### Changes:
 - Update `pika` library from version `1.0.0b1` to `1.3.2`
