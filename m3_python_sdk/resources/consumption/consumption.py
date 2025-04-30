@@ -170,6 +170,9 @@ class ConsumptionResource:
         if description is not None:
             params['description'] = description
 
+        if service_name is not None:
+            params['service_name'] = service_name
+
         if source_project and target_project:
             params.update({
                 'source_project': source_project,
@@ -180,7 +183,6 @@ class ConsumptionResource:
             params.update({
                 'source_account_number': source_account_number,
                 'target_account_number': target_account_number,
-                'service_name': service_name,
             })
 
         res = self._client.execute(
